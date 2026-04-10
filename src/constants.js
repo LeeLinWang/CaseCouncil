@@ -30,9 +30,9 @@ export const MODELS = {
     headerBg: 'bg-blue-900/30',
     dot: 'bg-blue-400',
     models: [
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3 Pro' },
-      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
-      { id: 'gemini-3.1-flash-preview', label: 'Gemini 3 Thinking', thinking: true },
+      { id: 'gemini-2.5-pro-preview-05-06', label: 'Gemini 2.5 Pro' },
+      { id: 'gemini-2.5-flash-preview-04-17', label: 'Gemini 2.5 Flash', thinking: true },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
     ],
   },
   seed: {

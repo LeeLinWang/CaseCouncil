@@ -15,7 +15,7 @@ async function callOpenAI({ model, systemPrompt, userMessage, messages, apiKey, 
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         ...messages,
       ],
-      max_tokens: 4096,
+      max_completion_tokens: 4096,
     }
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -146,15 +146,19 @@ async function callGemini({ model, systemPrompt, userMessage, messages, apiKey, 
   // Grounding with Google Search
   const tools = webSearch ? [{ google_search: {} }] : undefined
 
-  // thinkingConfig — Gemini 3 uses thinkingLevel (string), NOT thinkingBudget (int)
-  const thinkingConfig = isThinking
-    ? { thinkingLevel: 'high', includeThoughts: true }
-    : { thinkingLevel: 'minimal' }
+  // thinkingConfig is only supported on Gemini 2.5+ models.
+  // Sending it to 2.0 Flash causes an API error, so gate on model ID.
+  const supportsThinking = model.includes('2.5') || model.includes('2.0-pro')
+  const thinkingConfig = supportsThinking
+    ? isThinking
+      ? { thinkingLevel: 'high', includeThoughts: true }
+      : { thinkingLevel: 'minimal' }
+    : undefined
 
   const generationConfig = {
     maxOutputTokens: isThinking ? 16000 : 8192,
     temperature: 1.0,
-    thinkingConfig,
+    ...(thinkingConfig ? { thinkingConfig } : {}),
   }
 
   // Gemini uses 'model' instead of 'assistant' for the AI role
