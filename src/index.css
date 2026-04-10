@@ -44,9 +44,13 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Trebuchet MS', Trebuchet, sans-serif;
   background: var(--cc-bg);
   color: var(--cc-tx1);
+}
+
+* {
+  font-family: 'Trebuchet MS', Trebuchet, sans-serif;
 }
 
 #root {

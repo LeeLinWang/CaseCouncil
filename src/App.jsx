@@ -53,10 +53,11 @@ function buildCouncilContext(councilEntries) {
 
 export default function App() {
   const store = useStore()
-  const { members, consolidator, consolidatorEnabled, apiKeys, webSearch, setWebSearch, history, addToHistory, deleteEntry, starEntry } = store
+  const { members, consolidator, consolidatorEnabled, setConsolidatorEnabled, apiKeys, webSearch, setWebSearch, history, addToHistory, deleteEntry, starEntry } = store
   const { docContent, docName, loading: docLoading, processFile, clearDoc } = usePdf()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState('customize')
+  const [settingsScrollTo, setSettingsScrollTo] = useState(null)
   const [entries, setEntries] = useState([])
   const [running, setRunning] = useState(false)
   const [darkMode, setDarkMode] = useState(loadDarkMode)
@@ -66,6 +67,7 @@ export default function App() {
   const [soloMessages, setSoloMessages] = useState([])
   const bottomRef = useRef()
   const abortRef = useRef(null)
+
 
   function handleStop() {
     abortRef.current?.abort()
@@ -94,8 +96,9 @@ export default function App() {
     setEntries([entry])
   }
 
-  function handleOpenSettings(section) {
+  function handleOpenSettings(section, scrollTo = null) {
     setSettingsSection(section)
+    setSettingsScrollTo(scrollTo)
     setSettingsOpen(true)
   }
 
@@ -302,6 +305,10 @@ export default function App() {
     onModeChange: setMode,
     soloModel,
     onSoloModelChange: setSoloModel,
+    onOpenSettings: () => handleOpenSettings('customize'),
+    onOpenConsolidatorSettings: () => handleOpenSettings('customize', 'consolidator'),
+    consolidatorEnabled,
+    onConsolidatorToggle: () => setConsolidatorEnabled(!consolidatorEnabled),
   }
 
   return (
@@ -335,7 +342,7 @@ export default function App() {
                 <ChatInput {...sharedInputProps} />
               </div>
             </div>
-            <div className="flex items-center justify-center gap-2 pb-6 flex-wrap px-4">
+            {mode === 'council' && <div className="flex items-center justify-center gap-2 pb-6 flex-wrap px-4">
               {members.map((m, i) => (
                 <span
                   key={m.id}
@@ -349,7 +356,7 @@ export default function App() {
                   Consolidator
                 </span>
               )}
-            </div>
+            </div>}
           </div>
         )}
       </div>
@@ -359,6 +366,7 @@ export default function App() {
           store={store}
           onClose={() => setSettingsOpen(false)}
           initialSection={settingsSection}
+          scrollTo={settingsScrollTo}
         />
       )}
     </div>

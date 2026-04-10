@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import ModelSelect from './ModelSelect'
 import { MEMBER_NAMES } from '../constants'
 
@@ -66,7 +66,7 @@ function MemberConfig({ member, index, onChange }) {
           value={member.systemPrompt}
           onChange={(e) => onChange({ systemPrompt: e.target.value })}
           placeholder="System prompt / persona for this member..."
-          rows={3}
+          rows={8}
           className="w-full bg-[var(--cc-card)] border border-[var(--cc-border)] rounded-lg px-3 py-2 text-sm text-[var(--cc-tx1)] placeholder-[var(--cc-tx3)] focus:outline-none focus:border-[var(--cc-focus)] resize-none transition-colors"
         />
       </div>
@@ -74,9 +74,16 @@ function MemberConfig({ member, index, onChange }) {
   )
 }
 
-export default function SettingsPanel({ store, onClose, initialSection = 'customize' }) {
+export default function SettingsPanel({ store, onClose, initialSection = 'customize', scrollTo }) {
   const { members, setCouncilSize, updateMember, consolidator, setConsolidator, consolidatorEnabled, setConsolidatorEnabled, apiKeys, setApiKeys } = store
   const [section, setSection] = useState(initialSection)
+  const consolidatorRef = useRef()
+
+  useEffect(() => {
+    if (scrollTo === 'consolidator') {
+      setTimeout(() => consolidatorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+    }
+  }, [scrollTo])
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -84,7 +91,7 @@ export default function SettingsPanel({ store, onClose, initialSection = 'custom
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative ml-auto w-full max-w-lg bg-[var(--cc-card)] border-l border-[var(--cc-border)] h-full overflow-y-auto flex flex-col shadow-xl">
+      <div className="relative ml-auto bg-[var(--cc-card)] border-l border-[var(--cc-border)] h-full overflow-y-auto flex flex-col shadow-xl" style={{ width: 'min(60vw, 900px)', minWidth: '480px' }}>
         {/* Header */}
         <div className="sticky top-0 bg-[var(--cc-card)] border-b border-[var(--cc-border)] px-6 py-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-1">
@@ -152,7 +159,7 @@ export default function SettingsPanel({ store, onClose, initialSection = 'custom
                 </div>
               </section>
 
-              <section className="space-y-4">
+              <section ref={consolidatorRef} className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-semibold text-[var(--cc-tx1)]">Consolidator</h3>

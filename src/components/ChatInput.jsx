@@ -48,6 +48,9 @@ export default function ChatInput({
   webSearch, onWebSearchToggle,
   canToggleMode, mode, onModeChange,
   soloModel, onSoloModelChange,
+  onOpenSettings,
+  onOpenConsolidatorSettings,
+  consolidatorEnabled, onConsolidatorToggle,
 }) {
   const [prompt, setPrompt] = useState('')
   const fileRef = useRef()
@@ -99,6 +102,40 @@ export default function ChatInput({
                 </button>
               ))}
             </div>
+
+            {/* Customize + Consolidator buttons — visible only in council mode */}
+            {mode === 'council' && (
+              <>
+                <button
+                  onClick={onOpenSettings}
+                  className="h-7 px-2.5 rounded-lg text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: 'var(--cc-subtle)',
+                    border: '1px solid var(--cc-border)',
+                    color: 'var(--cc-tx2)',
+                  }}
+                >
+                  Customize
+                </button>
+                <div className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium transition-colors"
+                  style={{ backgroundColor: 'var(--cc-subtle)', border: '1px solid var(--cc-border)', color: 'var(--cc-tx2)' }}
+                >
+                  <span
+                    onClick={onConsolidatorToggle}
+                    className="relative inline-flex items-center w-7 h-4 rounded-full transition-colors flex-shrink-0 cursor-pointer"
+                    style={{ backgroundColor: consolidatorEnabled ? 'var(--cc-tx1)' : 'var(--cc-border)' }}
+                  >
+                    <span
+                      className="absolute w-3 h-3 bg-white rounded-full shadow transition-transform"
+                      style={{ transform: consolidatorEnabled ? 'translateX(14px)' : 'translateX(2px)' }}
+                    />
+                  </span>
+                  <span onClick={onOpenConsolidatorSettings} className="cursor-pointer hover:text-[var(--cc-tx1)] transition-colors">
+                    Consolidator
+                  </span>
+                </div>
+              </>
+            )}
 
             {/* Solo model dropdown — visible only in solo mode */}
             {mode === 'solo' && (
