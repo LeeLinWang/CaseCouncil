@@ -1,5 +1,6 @@
 import MemberCard from './MemberCard'
 import ConsolidatorCard from './ConsolidatorCard'
+import SoloCard from './SoloCard'
 
 function UserBubble({ prompt, docName }) {
   return (
@@ -53,6 +54,14 @@ function CouncilResponse({ entry }) {
   )
 }
 
+function SoloResponse({ entry }) {
+  return (
+    <div className="max-w-3xl mx-auto">
+      <SoloCard model={entry.model} response={entry.response} status={entry.status} />
+    </div>
+  )
+}
+
 export default function ChatHistory({ entries }) {
   if (!entries.length) return null
 
@@ -64,9 +73,12 @@ export default function ChatHistory({ entries }) {
           <div className="max-w-3xl mx-auto px-4">
             <UserBubble prompt={entry.prompt} docName={entry.docName} />
           </div>
-          {/* Council cards break out of the narrow container so they can scroll */}
-          <div className="px-4 mt-4">
-            <CouncilResponse entry={entry} />
+          {/* Council or solo response */}
+          <div className={`mt-4 ${entry.type === 'solo' ? 'max-w-3xl mx-auto px-4' : 'px-4'}`}>
+            {entry.type === 'solo'
+              ? <SoloResponse entry={entry} />
+              : <CouncilResponse entry={entry} />
+            }
           </div>
         </div>
       ))}

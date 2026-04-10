@@ -50,13 +50,26 @@ function MemberConfig({ member, index, onChange }) {
         onChange={(model) => onChange({ model })}
         className="w-full"
       />
-      <textarea
-        value={member.systemPrompt}
-        onChange={(e) => onChange({ systemPrompt: e.target.value })}
-        placeholder="System prompt / persona for this member..."
-        rows={3}
-        className="w-full bg-[var(--cc-card)] border border-[var(--cc-border)] rounded-lg px-3 py-2 text-sm text-[var(--cc-tx1)] placeholder-[var(--cc-tx3)] focus:outline-none focus:border-[var(--cc-focus)] resize-none transition-colors"
-      />
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-[var(--cc-tx3)]">Persona</span>
+          {member.systemPrompt && (
+            <button
+              onClick={() => onChange({ systemPrompt: '' })}
+              className="text-xs text-[var(--cc-tx3)] hover:text-[var(--cc-tx1)] transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <textarea
+          value={member.systemPrompt}
+          onChange={(e) => onChange({ systemPrompt: e.target.value })}
+          placeholder="System prompt / persona for this member..."
+          rows={3}
+          className="w-full bg-[var(--cc-card)] border border-[var(--cc-border)] rounded-lg px-3 py-2 text-sm text-[var(--cc-tx1)] placeholder-[var(--cc-tx3)] focus:outline-none focus:border-[var(--cc-focus)] resize-none transition-colors"
+        />
+      </div>
     </div>
   )
 }
@@ -170,13 +183,26 @@ export default function SettingsPanel({ store, onClose, initialSection = 'custom
                     onChange={(model) => setConsolidator({ ...consolidator, model })}
                     className="w-full"
                   />
-                  <textarea
-                    value={consolidator.systemPrompt}
-                    onChange={(e) => setConsolidator({ ...consolidator, systemPrompt: e.target.value })}
-                    rows={5}
-                    placeholder="System prompt for the consolidator..."
-                    className="w-full bg-[var(--cc-card)] border border-[var(--cc-border)] rounded-lg px-3 py-2 text-sm text-[var(--cc-tx1)] placeholder-[var(--cc-tx3)] focus:outline-none focus:border-[var(--cc-focus)] resize-none transition-colors"
-                  />
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-[var(--cc-tx3)]">Persona</span>
+                      {consolidator.systemPrompt && (
+                        <button
+                          onClick={() => setConsolidator({ ...consolidator, systemPrompt: '' })}
+                          className="text-xs text-[var(--cc-tx3)] hover:text-[var(--cc-tx1)] transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={consolidator.systemPrompt}
+                      onChange={(e) => setConsolidator({ ...consolidator, systemPrompt: e.target.value })}
+                      rows={5}
+                      placeholder="System prompt for the consolidator..."
+                      className="w-full bg-[var(--cc-card)] border border-[var(--cc-border)] rounded-lg px-3 py-2 text-sm text-[var(--cc-tx1)] placeholder-[var(--cc-tx3)] focus:outline-none focus:border-[var(--cc-focus)] resize-none transition-colors"
+                    />
+                  </div>
                 </div>
               </section>
             </>

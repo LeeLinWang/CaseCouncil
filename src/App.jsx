@@ -22,6 +22,35 @@ function loadDarkMode() {
   }
 }
 
+// Build a system prompt for the solo AI from all council entries.
+// Includes any PDF document content captured in entries.
+function buildCouncilContext(councilEntries) {
+  if (!councilEntries.length) return ''
+
+  const blocks = councilEntries.map((entry, idx) => {
+    const docSection = entry.docContent
+      ? `**Document: ${entry.docName}**\n\n${entry.docContent}\n\n---\n\n`
+      : ''
+
+    const memberSection = entry.members
+      .map((m, i) => {
+        const response = entry.responses?.[i] ?? ''
+        const status = entry.statuses?.[i]
+        return `### ${m.name || `Member ${i + 1}`} (${m.model})\n${status === 'error' ? '[No response — error]' : response}`
+      })
+      .join('\n\n')
+
+    const consolidatorSection =
+      entry.consolidatorResponse && entry.consolidatorStatus === 'done'
+        ? `\n\n### Council Analysis\n${entry.consolidatorResponse}`
+        : ''
+
+    return `${docSection}**Prompt ${idx + 1}:** ${entry.prompt}\n\n${memberSection}${consolidatorSection}`
+  }).join('\n\n---\n\n')
+
+  return `You have full access to a council deliberation record. Use it as your knowledge base and speak as a single, clear, synthesized voice. Be direct and actionable.\n\n${blocks}`
+}
+
 export default function App() {
   const store = useStore()
   const { members, consolidator, consolidatorEnabled, apiKeys, webSearch, setWebSearch, history, addToHistory, deleteEntry, starEntry } = store
@@ -31,7 +60,16 @@ export default function App() {
   const [entries, setEntries] = useState([])
   const [running, setRunning] = useState(false)
   const [darkMode, setDarkMode] = useState(loadDarkMode)
+  // Solo AI mode
+  const [mode, setMode] = useState('council')
+  const [soloModel, setSoloModel] = useState('claude-sonnet-4-5')
+  const [soloMessages, setSoloMessages] = useState([])
   const bottomRef = useRef()
+  const abortRef = useRef(null)
+
+  function handleStop() {
+    abortRef.current?.abort()
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -47,6 +85,8 @@ export default function App() {
 
   function handleNewChat() {
     setEntries([])
+    setSoloMessages([])
+    setMode('council')
     clearDoc()
   }
 
@@ -59,7 +99,10 @@ export default function App() {
     setSettingsOpen(true)
   }
 
-  async function handleSubmit(prompt) {
+  async function handleCouncilSubmit(prompt) {
+    const controller = new AbortController()
+    abortRef.current = controller
+
     const userMessage = docContent
       ? `[Document: ${docName}]\n\n${docContent}\n\n---\n\n${prompt}`
       : prompt
@@ -72,6 +115,7 @@ export default function App() {
       id: entryId,
       prompt,
       docName: docContent ? docName : null,
+      docContent: docContent || null,
       members: memberSnapshots,
       consolidator: consolidatorSnapshot,
       responses: memberSnapshots.map(() => ''),
@@ -91,16 +135,24 @@ export default function App() {
           userMessage,
           apiKeys,
           webSearch,
+          signal: controller.signal,
         })
       )
     )
 
-    const responses = results.map((r) =>
-      r.status === 'fulfilled' ? r.value : `Error: ${r.reason?.message ?? 'Unknown error'}`
-    )
-    const statuses = results.map((r) => (r.status === 'fulfilled' ? 'done' : 'error'))
+    const aborted = results.some((r) => r.reason?.name === 'AbortError')
 
-    // Flush member responses to UI
+    const responses = results.map((r) =>
+      r.status === 'fulfilled' ? r.value
+      : r.reason?.name === 'AbortError' ? ''
+      : `Error: ${r.reason?.message ?? 'Unknown error'}`
+    )
+    const statuses = results.map((r) =>
+      r.status === 'fulfilled' ? 'done'
+      : r.reason?.name === 'AbortError' ? 'done'
+      : 'error'
+    )
+
     setEntries((prev) =>
       prev.map((e) => (e.id === entryId ? { ...e, responses, statuses } : e))
     )
@@ -108,14 +160,12 @@ export default function App() {
     let consolidatorResponse = ''
     let consolidatorStatus = null
 
-    if (consolidatorEnabled) {
+    if (consolidatorEnabled && !aborted) {
       const councilSummary = memberSnapshots
         .map((m, i) => `## ${m.name || `Member ${i + 1}`} (${m.model})\n\n${responses[i]}`)
         .join('\n\n---\n\n')
 
       const consolidatorMessage = `The council was asked:\n\n"${prompt}"\n\nHere are the council members' responses:\n\n${councilSummary}`
-
-      consolidatorStatus = 'loading'
 
       setEntries((prev) =>
         prev.map((e) =>
@@ -130,11 +180,14 @@ export default function App() {
           userMessage: consolidatorMessage,
           apiKeys,
           webSearch,
+          signal: controller.signal,
         })
         consolidatorStatus = 'done'
       } catch (e) {
-        consolidatorResponse = `Error: ${e.message}`
-        consolidatorStatus = 'error'
+        if (e.name !== 'AbortError') {
+          consolidatorResponse = `Error: ${e.message}`
+          consolidatorStatus = 'error'
+        }
       }
     }
 
@@ -147,11 +200,94 @@ export default function App() {
     }
 
     setEntries((prev) => prev.map((e) => (e.id === entryId ? finalEntry : e)))
-    addToHistory(finalEntry)
+    if (!aborted) addToHistory(finalEntry)
     setRunning(false)
   }
 
+  async function handleSoloSubmit(prompt) {
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const userContent = docContent
+      ? `[Document: ${docName}]\n\n${docContent}\n\n---\n\n${prompt}`
+      : prompt
+
+    const updatedMessages = [...soloMessages, { role: 'user', content: userContent }]
+
+    const entryId = crypto.randomUUID()
+    const newEntry = {
+      id: entryId,
+      type: 'solo',
+      prompt,
+      docName: docContent ? docName : null,
+      model: soloModel,
+      response: '',
+      status: 'loading',
+    }
+
+    setEntries((prev) => [...prev, newEntry])
+    setRunning(true)
+
+    const councilEntries = entries.filter((e) => e.type !== 'solo')
+    const councilContext = buildCouncilContext(councilEntries)
+
+    try {
+      const response = await callModel({
+        model: soloModel,
+        systemPrompt: councilContext || undefined,
+        messages: updatedMessages,
+        apiKeys,
+        webSearch,
+        useCache: !!councilContext,
+        signal: controller.signal,
+      })
+
+      setSoloMessages([...updatedMessages, { role: 'assistant', content: response }])
+      setEntries((prev) =>
+        prev.map((e) => (e.id === entryId ? { ...e, response, status: 'done' } : e))
+      )
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // Remove the placeholder entry — nothing came back
+        setEntries((prev) => prev.filter((e) => e.id !== entryId))
+      } else {
+        setEntries((prev) =>
+          prev.map((e) =>
+            e.id === entryId ? { ...e, response: `Error: ${err.message}`, status: 'error' } : e
+          )
+        )
+      }
+    }
+
+    setRunning(false)
+  }
+
+  async function handleSubmit(prompt) {
+    if (mode === 'solo') {
+      await handleSoloSubmit(prompt)
+    } else {
+      await handleCouncilSubmit(prompt)
+    }
+  }
+
   const hasEntries = entries.length > 0
+
+  const sharedInputProps = {
+    onSubmit: handleSubmit,
+    disabled: running,
+    onStop: handleStop,
+    docName,
+    docLoading,
+    onFileSelect: processFile,
+    onFileClear: clearDoc,
+    webSearch,
+    onWebSearchToggle: () => setWebSearch(!webSearch),
+    canToggleMode: true,
+    mode,
+    onModeChange: setMode,
+    soloModel,
+    onSoloModelChange: setSoloModel,
+  }
 
   return (
     <div className={`flex h-screen overflow-hidden bg-[var(--cc-bg)] ${darkMode ? 'dark' : ''}`}>
@@ -172,16 +308,7 @@ export default function App() {
           <>
             <ChatHistory entries={entries} />
             <div ref={bottomRef} />
-            <ChatInput
-              onSubmit={handleSubmit}
-              disabled={running}
-              docName={docName}
-              docLoading={docLoading}
-              onFileSelect={processFile}
-              onFileClear={clearDoc}
-              webSearch={webSearch}
-              onWebSearchToggle={() => setWebSearch(!webSearch)}
-            />
+            <ChatInput {...sharedInputProps} />
           </>
         ) : (
           <div className="flex-1 flex flex-col">
@@ -190,16 +317,7 @@ export default function App() {
                 {getGreeting()}, Caser
               </h1>
               <div className="w-full max-w-3xl">
-                <ChatInput
-                  onSubmit={handleSubmit}
-                  disabled={running}
-                  docName={docName}
-                  docLoading={docLoading}
-                  onFileSelect={processFile}
-                  onFileClear={clearDoc}
-                  webSearch={webSearch}
-                  onWebSearchToggle={() => setWebSearch(!webSearch)}
-                />
+                <ChatInput {...sharedInputProps} />
               </div>
             </div>
             <div className="flex items-center justify-center gap-2 pb-6 flex-wrap px-4">

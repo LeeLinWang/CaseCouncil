@@ -6,7 +6,35 @@ import { getProvider, getModelMeta } from './constants'
 // Endpoint: /v1/responses  (Responses API — not Chat Completions)
 // Web search: built-in tool type "web_search_preview"
 // Response: data.output[] — filter type='message', content[].type='output_text'
-async function callOpenAI({ model, systemPrompt, userMessage, apiKey, webSearch }) {
+async function callOpenAI({ model, systemPrompt, userMessage, messages, apiKey, webSearch, signal }) {
+  // Multi-turn: use Chat Completions so we can pass conversation history
+  if (messages) {
+    const body = {
+      model,
+      messages: [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        ...messages,
+      ],
+      max_tokens: 4096,
+    }
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err?.error?.message ?? `OpenAI ${res.status}: ${res.statusText}`)
+    }
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content?.trim() ?? '(no response)'
+  }
+
+  // Single-turn: Responses API
   const tools = webSearch
     ? [{ type: 'web_search_preview' }]
     : undefined
@@ -26,6 +54,7 @@ async function callOpenAI({ model, systemPrompt, userMessage, apiKey, webSearch 
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!res.ok) {
@@ -39,9 +68,6 @@ async function callOpenAI({ model, systemPrompt, userMessage, apiKey, webSearch 
     throw new Error(`OpenAI error: ${data.error?.message ?? 'Unknown error'}`)
   }
 
-  // Extract text from output array:
-  // - output[] may contain web_search_call items (skip) and message items (keep)
-  // - Each message item has content[] with type='output_text' blocks
   const text = (data.output ?? [])
     .filter((item) => item.type === 'message')
     .flatMap((item) => item.content ?? [])
@@ -55,16 +81,26 @@ async function callOpenAI({ model, systemPrompt, userMessage, apiKey, webSearch 
 
 // ── Anthropic ─────────────────────────────────────────────────────────────────
 // Docs: https://docs.anthropic.com/en/api/messages
-async function callAnthropic({ model, systemPrompt, userMessage, apiKey, webSearch }) {
+// useCache: when true, marks the system prompt with cache_control so the large
+// council context is billed once and reused across solo conversation turns.
+async function callAnthropic({ model, systemPrompt, userMessage, messages, apiKey, webSearch, useCache, signal }) {
   const tools = webSearch
     ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
+    : undefined
+
+  // Cache the system prompt block when requested — Anthropic stores it server-side
+  // for the duration of the session so subsequent turns don't re-bill that prefix.
+  const systemField = systemPrompt
+    ? useCache
+      ? [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
+      : systemPrompt
     : undefined
 
   const body = {
     model,
     max_tokens: 8096,
-    ...(systemPrompt ? { system: systemPrompt } : {}),
-    messages: [{ role: 'user', content: userMessage }],
+    ...(systemField !== undefined ? { system: systemField } : {}),
+    messages: messages ?? [{ role: 'user', content: userMessage }],
     ...(tools ? { tools } : {}),
   }
 
@@ -75,8 +111,10 @@ async function callAnthropic({ model, systemPrompt, userMessage, apiKey, webSear
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
+      ...(useCache ? { 'anthropic-beta': 'prompt-caching-2024-07-31' } : {}),
     },
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!res.ok) {
@@ -101,7 +139,7 @@ async function callAnthropic({ model, systemPrompt, userMessage, apiKey, webSear
 // Grounding: tools: [{ google_search: {} }]
 // Thought parts: parts where part.thought === true — must be filtered from output
 // Temperature: 1.0 recommended for Gemini 3
-async function callGemini({ model, systemPrompt, userMessage, apiKey, webSearch }) {
+async function callGemini({ model, systemPrompt, userMessage, messages, apiKey, webSearch, signal }) {
   const meta = getModelMeta(model)
   const isThinking = meta.thinking
 
@@ -119,13 +157,16 @@ async function callGemini({ model, systemPrompt, userMessage, apiKey, webSearch 
     thinkingConfig,
   }
 
+  // Gemini uses 'model' instead of 'assistant' for the AI role
+  const contents = messages
+    ? messages.map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }))
+    : [{ role: 'user', parts: [{ text: userMessage }] }]
+
   const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: userMessage }],
-      },
-    ],
+    contents,
     ...(systemPrompt
       ? { systemInstruction: { parts: [{ text: systemPrompt }] } }
       : {}),
@@ -139,6 +180,7 @@ async function callGemini({ model, systemPrompt, userMessage, apiKey, webSearch 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!res.ok) {
@@ -206,7 +248,7 @@ function buildSeedUserContent(userMessage) {
   return [{ type: 'text', text: userMessage }]
 }
 
-async function callSeed({ model, systemPrompt, userMessage, apiKey, webSearch }) {
+async function callSeed({ model, systemPrompt, userMessage, messages: incomingMessages, apiKey, webSearch, signal }) {
   const meta = getModelMeta(model)
   const isThinking = meta.thinking
 
@@ -216,11 +258,16 @@ async function callSeed({ model, systemPrompt, userMessage, apiKey, webSearch })
     messages.push({ role: 'system', content: systemPrompt })
   }
 
-  // User content: array of typed text parts (document + question if file attached)
-  messages.push({
-    role: 'user',
-    content: buildSeedUserContent(userMessage),
-  })
+  if (incomingMessages) {
+    // Multi-turn: messages already have plain string content
+    messages.push(...incomingMessages)
+  } else {
+    // Single-turn: use typed content parts (handles document splitting)
+    messages.push({
+      role: 'user',
+      content: buildSeedUserContent(userMessage),
+    })
+  }
 
   // Web search via function calling — Seed has no built-in search tool
   const tools = webSearch
@@ -263,6 +310,7 @@ async function callSeed({ model, systemPrompt, userMessage, apiKey, webSearch })
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal,
     }
   )
 
@@ -295,7 +343,7 @@ async function callSeed({ model, systemPrompt, userMessage, apiKey, webSearch })
 }
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
-export async function callModel({ model, systemPrompt, userMessage, apiKeys, webSearch }) {
+export async function callModel({ model, systemPrompt, userMessage, messages, apiKeys, webSearch, useCache, signal }) {
   const provider = getProvider(model)
 
   const map = {
@@ -311,5 +359,5 @@ export async function callModel({ model, systemPrompt, userMessage, apiKeys, web
   const apiKey = apiKeys[provider]
   if (!apiKey) throw new Error(`No API key set for ${provider}`)
 
-  return fn({ model, systemPrompt, userMessage, apiKey, webSearch })
+  return fn({ model, systemPrompt, userMessage, messages, apiKey, webSearch, useCache, signal })
 }

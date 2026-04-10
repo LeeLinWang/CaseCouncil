@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { DEFAULT_MEMBER, DEFAULT_CONSOLIDATOR, MEMBER_NAMES } from './constants'
+import { DEFAULT_MEMBER, DEFAULT_CONSOLIDATOR, MEMBER_NAMES, MEMBER_PROMPTS } from './constants'
 
 const STORAGE_KEYS = {
   members: 'council_members',
@@ -23,6 +23,7 @@ function makeDefaultMembers(count = 3) {
   return Array.from({ length: count }, (_, i) => ({
     ...DEFAULT_MEMBER,
     name: MEMBER_NAMES[i] ?? `Member ${i + 1}`,
+    systemPrompt: MEMBER_PROMPTS[i] ?? '',
     id: crypto.randomUUID(),
   }))
 }
@@ -101,6 +102,7 @@ export function useStore() {
         const extra = Array.from({ length: size - prev.length }, (_, i) => ({
           ...DEFAULT_MEMBER,
           name: MEMBER_NAMES[prev.length + i] ?? `Member ${prev.length + i + 1}`,
+          systemPrompt: MEMBER_PROMPTS[prev.length + i] ?? '',
           id: crypto.randomUUID(),
         }))
         return [...prev, ...extra]
