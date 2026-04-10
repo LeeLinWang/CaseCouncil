@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import ModelSelect from './ModelSelect'
-import { MEMBER_NAMES } from '../constants'
+import { MEMBER_NAMES, MEMBER_PROMPTS } from '../constants'
+
+const PRESET_PERSONAS = MEMBER_NAMES.map((name, i) => ({ name, systemPrompt: MEMBER_PROMPTS[i] }))
 
 function ApiKeyInput({ label, value, onChange }) {
   const [show, setShow] = useState(false)
@@ -31,6 +33,17 @@ function ApiKeyInput({ label, value, onChange }) {
 }
 
 function MemberConfig({ member, index, onChange }) {
+  const activePreset = PRESET_PERSONAS.findIndex(
+    (p) => p.name === member.name && p.systemPrompt === member.systemPrompt
+  )
+
+  function handlePresetChange(e) {
+    const idx = Number(e.target.value)
+    if (idx === -1) return
+    const preset = PRESET_PERSONAS[idx]
+    onChange({ name: preset.name, systemPrompt: preset.systemPrompt })
+  }
+
   return (
     <div className="bg-[var(--cc-bg)] rounded-xl p-4 space-y-3 border border-[var(--cc-border)]">
       <div className="flex items-center gap-2">
@@ -44,6 +57,16 @@ function MemberConfig({ member, index, onChange }) {
           placeholder={MEMBER_NAMES[index] ?? `Member ${index + 1}`}
           className="flex-1 bg-[var(--cc-card)] border border-[var(--cc-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--cc-tx1)] placeholder-[var(--cc-tx3)] focus:outline-none focus:border-[var(--cc-focus)] transition-colors"
         />
+        <select
+          value={activePreset}
+          onChange={handlePresetChange}
+          className="bg-[var(--cc-card)] border border-[var(--cc-border)] rounded-lg px-2 py-1.5 text-sm text-[var(--cc-tx1)] focus:outline-none transition-colors"
+        >
+          <option value={-1}>{activePreset === -1 ? 'Custom' : 'Preset'}</option>
+          {PRESET_PERSONAS.map((p, i) => (
+            <option key={p.name} value={i}>{p.name}</option>
+          ))}
+        </select>
       </div>
       <ModelSelect
         value={member.model}
