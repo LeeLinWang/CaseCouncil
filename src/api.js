@@ -148,7 +148,7 @@ async function callGemini({ model, systemPrompt, userMessage, messages, apiKey, 
 
   // thinkingConfig is only supported on Gemini 2.5+ models.
   // Sending it to 2.0 Flash causes an API error, so gate on model ID.
-  const supportsThinking = model.includes('2.5') || model.includes('2.0-pro')
+  const supportsThinking = model.startsWith('gemini-2.5')
   const thinkingConfig = supportsThinking
     ? isThinking
       ? { thinkingLevel: 'high', includeThoughts: true }
