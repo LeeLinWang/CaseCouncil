@@ -242,10 +242,10 @@ export default function App() {
         signal: controller.signal,
       })
 
+      const finalEntry = { ...newEntry, response, status: 'done' }
       setSoloMessages([...updatedMessages, { role: 'assistant', content: response }])
-      setEntries((prev) =>
-        prev.map((e) => (e.id === entryId ? { ...e, response, status: 'done' } : e))
-      )
+      setEntries((prev) => prev.map((e) => (e.id === entryId ? finalEntry : e)))
+      addToHistory(finalEntry)
     } catch (err) {
       if (err.name === 'AbortError') {
         // Remove the placeholder entry — nothing came back
