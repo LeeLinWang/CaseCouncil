@@ -17,24 +17,30 @@ function UserBubble({ prompt, docName }) {
 }
 
 function CouncilResponse({ entry }) {
-  const colClass =
-    entry.members.length === 1
-      ? 'grid-cols-1'
-      : entry.members.length === 2
-      ? 'grid-cols-1 sm:grid-cols-2'
-      : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+  const count = entry.members.length
+  // Cards have a min width so they stay readable; 1–2 members fill the space naturally
+  const cardMinWidth = count >= 3 ? '360px' : count === 2 ? '280px' : '0px'
 
   return (
     <div className="mb-8">
-      <div className={`grid ${colClass} gap-4`}>
-        {entry.members.map((m, i) => (
-          <MemberCard
-            key={m.id ?? i}
-            member={m}
-            response={entry.responses?.[i]}
-            status={entry.statuses?.[i] ?? 'loading'}
-          />
-        ))}
+      <div className="overflow-x-auto pb-2">
+        <div
+          className="flex gap-4"
+          style={{ minWidth: '100%' }}
+        >
+          {entry.members.map((m, i) => (
+            <div
+              key={m.id ?? i}
+              style={{ minWidth: cardMinWidth, flex: '1 1 0' }}
+            >
+              <MemberCard
+                member={m}
+                response={entry.responses?.[i]}
+                status={entry.statuses?.[i] ?? 'loading'}
+              />
+            </div>
+          ))}
+        </div>
       </div>
       {entry.consolidatorStatus && (
         <ConsolidatorCard
@@ -51,15 +57,19 @@ export default function ChatHistory({ entries }) {
   if (!entries.length) return null
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
-      <div className="max-w-3xl mx-auto space-y-6">
-        {entries.map((entry) => (
-          <div key={entry.id}>
+    <div className="flex-1 overflow-y-auto py-6">
+      {entries.map((entry) => (
+        <div key={entry.id} className="mb-6">
+          {/* User bubble stays narrow and centred */}
+          <div className="max-w-3xl mx-auto px-4">
             <UserBubble prompt={entry.prompt} docName={entry.docName} />
+          </div>
+          {/* Council cards break out of the narrow container so they can scroll */}
+          <div className="px-4 mt-4">
             <CouncilResponse entry={entry} />
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   )
 }
