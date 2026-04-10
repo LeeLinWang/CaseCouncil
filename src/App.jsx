@@ -127,8 +127,13 @@ export default function App() {
     setEntries((prev) => [...prev, newEntry])
     setRunning(true)
 
-    const results = await Promise.allSettled(
-      memberSnapshots.map((member) =>
+    // Shared mutable arrays — each promise writes its own slot then updates the UI immediately
+    const responses = memberSnapshots.map(() => '')
+    const statuses = memberSnapshots.map(() => 'loading')
+    let aborted = false
+
+    await Promise.all(
+      memberSnapshots.map((member, i) =>
         callModel({
           model: member.model,
           systemPrompt: member.systemPrompt,
@@ -137,26 +142,36 @@ export default function App() {
           webSearch,
           signal: controller.signal,
         })
+          .then((response) => {
+            responses[i] = response
+            statuses[i] = 'done'
+          })
+          .catch((err) => {
+            if (err.name === 'AbortError') {
+              aborted = true
+              statuses[i] = 'done'
+            } else {
+              responses[i] = `Error: ${err.message ?? 'Unknown error'}`
+              statuses[i] = 'error'
+            }
+          })
+          .finally(() => {
+            // Populate this member's card the moment its call settles
+            setEntries((prev) =>
+              prev.map((e) => {
+                if (e.id !== entryId) return e
+                const newResponses = [...e.responses]
+                const newStatuses = [...e.statuses]
+                newResponses[i] = responses[i]
+                newStatuses[i] = statuses[i]
+                return { ...e, responses: newResponses, statuses: newStatuses }
+              })
+            )
+          })
       )
     )
 
-    const aborted = results.some((r) => r.reason?.name === 'AbortError')
-
-    const responses = results.map((r) =>
-      r.status === 'fulfilled' ? r.value
-      : r.reason?.name === 'AbortError' ? ''
-      : `Error: ${r.reason?.message ?? 'Unknown error'}`
-    )
-    const statuses = results.map((r) =>
-      r.status === 'fulfilled' ? 'done'
-      : r.reason?.name === 'AbortError' ? 'done'
-      : 'error'
-    )
-
-    setEntries((prev) =>
-      prev.map((e) => (e.id === entryId ? { ...e, responses, statuses } : e))
-    )
-
+    // All members done — now start consolidator
     let consolidatorResponse = ''
     let consolidatorStatus = null
 
@@ -169,7 +184,7 @@ export default function App() {
 
       setEntries((prev) =>
         prev.map((e) =>
-          e.id === entryId ? { ...e, responses, statuses, consolidatorStatus: 'loading' } : e
+          e.id === entryId ? { ...e, consolidatorStatus: 'loading' } : e
         )
       )
 
